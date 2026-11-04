@@ -1,0 +1,24 @@
+name: Bug report
+description: Сообщить о воспроизводимой ошибке
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes: { label: Описание, description: Что произошло и что ожидалось? }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Шаги воспроизведения, placeholder: "1. Открыть…\n2. Нажать…" }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: Версия Ritmo }
+    validations: { required: true }
+  - type: input
+    id: device
+    attributes: { label: Устройство и версия Android }
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes: { label: Логи или скриншоты, description: Не прикладывайте персональные данные. }
