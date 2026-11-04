@@ -1,0 +1,17 @@
+.git
+.gradle
+.idea
+**/build
+dist
+*.apk
+.git
+.github
+README.md
+CONTRIBUTING.md
+SECURITY.md
+CODE_OF_CONDUCT.md
+keystore/
+keystore.properties
+*.jks
+*.keystore
+.aws
