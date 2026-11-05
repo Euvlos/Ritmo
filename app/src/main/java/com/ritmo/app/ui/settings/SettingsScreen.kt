@@ -18,14 +18,21 @@ import com.ritmo.app.R
 import com.ritmo.app.settings.*
 import com.ritmo.app.updates.*
 import com.ritmo.app.BuildConfig
-import android.content.Intent
-import android.provider.Settings
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState(); val context = LocalContext.current
     val updateState by viewModel.updates.state.collectAsState()
+    val watchNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) sendWatchTestNotification(context) }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
@@ -71,9 +78,9 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
             item {
                 SettingsCard("Часы и браслеты", Icons.Rounded.Watch) {
-                    Text("Ritmo отправляет публичные системные уведомления, которые могут зеркалировать Huawei Health, Galaxy Wearable, Zepp, Garmin Connect и Wear OS. Для Huawei Watch Fit включи Ritmo в списке уведомлений Huawei Health и сними ограничение батареи с Huawei Health.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button({ context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }, Modifier.fillMaxWidth()) { Text("Уведомления Ritmo") }
-                    OutlinedButton({ context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, Modifier.fillMaxWidth()) { Text("Доступ к уведомлениям") }
+                    Button({ if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) watchNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else sendWatchTestNotification(context) }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.NotificationsActive, null); Spacer(Modifier.width(8.dp)); Text("Проверить уведомления")
+                    }
                 }
             }
             item {
@@ -91,3 +98,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 @Composable private fun LanguageRow(title: String, code: String, selected: Boolean, click: () -> Unit) = ListItem(headlineContent = { Text(title) }, leadingContent = { Text(code) }, trailingContent = { RadioButton(selected, click) }, modifier = Modifier.fillMaxWidth(), colors = ListItemDefaults.colors(containerColor = Color.Transparent))
 @Composable private fun ColorSlider(label: String, value: Float, change: (Float) -> Unit) = Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Text(label, Modifier.width(24.dp)); Slider(value, change, Modifier.weight(1f), valueRange = 0f..255f) }
 private fun rgb(red: Float, green: Float, blue: Float): Long = 0xFF000000 or (red.toLong() shl 16) or (green.toLong() shl 8) or blue.toLong()
+private fun sendWatchTestNotification(context: android.content.Context) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val channel = "watch_test"
+    manager.createNotificationChannel(NotificationChannel(channel, "Проверка часов", NotificationManager.IMPORTANCE_HIGH))
+    manager.notify(9042, NotificationCompat.Builder(context, channel)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setContentTitle("Проверка Ritmo")
+        .setContentText("Если это уведомление появилось на часах — всё работает")
+        .setCategory(NotificationCompat.CATEGORY_REMINDER)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setLocalOnly(false)
+        .setAutoCancel(true)
+        .build())
+}
