@@ -29,7 +29,7 @@ class RoomGoalRepository @Inject constructor(private val dao: GoalDao, private v
             val times = slots.groupBy { it.goalId }.mapValues { it.value.map { slot -> slot.localTimeMinutes } }
             rows.map { row ->
                 DailyGoal(
-                    com.ritmo.app.data.local.GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay).toDomain().copy(executionTimes = times[row.id].orEmpty()),
+                    com.ritmo.app.data.local.GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay, row.archivedEpochDay, row.reminderMode, row.alarmSoundUri, row.alarmSoundName).toDomain().copy(executionTimes = times[row.id].orEmpty()),
                     row.completed,
                 )
             }.filter { it.goal.isScheduledOn(date) }
@@ -41,6 +41,16 @@ class RoomGoalRepository @Inject constructor(private val dao: GoalDao, private v
         if (goal.reminderTimeMinutes != null || goal.executionTimes.isNotEmpty()) reminders.schedule(goal.copy(id = id))
         RitmoWidgetProvider.updateAll(context)
         return id
+    }
+    override suspend fun get(goalId: Long): Goal? = dao.getGoal(goalId)?.toDomain()?.copy(executionTimes = dao.getSlots(goalId).map { it.localTimeMinutes })
+    override suspend fun update(goal: Goal) {
+        val previous = get(goal.id)
+        if (previous != null) reminders.cancel(previous)
+        dao.updateGoal(goal.toEntity())
+        dao.deleteSlots(goal.id)
+        if (goal.executionTimes.isNotEmpty()) dao.insertSlots(goal.executionTimes.mapIndexed { index, time -> ScheduleSlotEntity(goalId = goal.id, localTimeMinutes = time, sortOrder = index) })
+        if (goal.reminderTimeMinutes != null || goal.executionTimes.isNotEmpty()) reminders.schedule(goal)
+        RitmoWidgetProvider.updateAll(context)
     }
     override suspend fun increment(goalId: Long, date: LocalDate) {
         dao.insertCompletion(CompletionEntity(goalId = goalId, effectiveEpochDay = date.toEpochDay(), completedAt = Instant.now()))

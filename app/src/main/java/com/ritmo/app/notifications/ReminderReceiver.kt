@@ -15,6 +15,7 @@ import com.ritmo.app.MainActivity
 import com.ritmo.app.R
 import com.ritmo.app.domain.model.Goal
 import com.ritmo.app.domain.model.RecurrenceType
+import com.ritmo.app.domain.model.ReminderMode
 import com.ritmo.app.data.local.GoalDao
 import com.ritmo.app.data.local.CompletionEntity
 import com.ritmo.app.data.local.SkippedOccurrenceEntity
@@ -70,14 +71,18 @@ class ReminderReceiver : BroadcastReceiver() {
             manager.cancel(requestCode)
             return
         }
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.reminders), NotificationManager.IMPORTANCE_DEFAULT))
+        val mode = runCatching { ReminderMode.valueOf(intent.getStringExtra(REMINDER_MODE) ?: ReminderMode.NOTIFICATION.name) }.getOrDefault(ReminderMode.NOTIFICATION)
+        val channelId = when (mode) { ReminderMode.NOTIFICATION -> CHANNEL; ReminderMode.VIBRATION -> VIBRATION_CHANNEL; ReminderMode.ALARM -> ALARM_CHANNEL }
+        val importance = if (mode == ReminderMode.ALARM) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT
+        manager.createNotificationChannel(NotificationChannel(channelId, context.getString(R.string.reminders), importance).apply { enableVibration(mode != ReminderMode.NOTIFICATION); if (mode != ReminderMode.ALARM) setSound(null, null) })
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED || android.os.Build.VERSION.SDK_INT < 33) {
             val open = PendingIntent.getActivity(context, id.toInt(), Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val complete = PendingIntent.getBroadcast(context, requestCode + 10, Intent(context, ReminderReceiver::class.java).putExtras(intent.extras ?: android.os.Bundle()).setAction(ACTION_COMPLETE), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val snooze = PendingIntent.getActivity(context, requestCode + 20, Intent(context, SnoozeActivity::class.java).putExtras(intent.extras ?: android.os.Bundle()), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val skip = PendingIntent.getBroadcast(context, requestCode + 30, Intent(context, ReminderReceiver::class.java).putExtras(intent.extras ?: android.os.Bundle()).setAction(ACTION_SKIP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val completeAction = NotificationCompat.Action(0, "Выполнено", complete)
-            manager.notify(requestCode, NotificationCompat.Builder(context, CHANNEL)
+            val alarmIntent = PendingIntent.getActivity(context, requestCode + 40, Intent(context, AlarmActivity::class.java).putExtras(intent.extras ?: android.os.Bundle()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            manager.notify(requestCode, NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(context.resources.getQuantityString(R.plurals.reminder_progress, required, required))
@@ -86,7 +91,11 @@ class ReminderReceiver : BroadcastReceiver() {
                 .addAction(0, "Отложить", snooze)
                 .addAction(0, "Пропустить", skip)
                 .extend(NotificationCompat.WearableExtender().addAction(completeAction))
+                .setPriority(if (mode == ReminderMode.ALARM) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_DEFAULT)
+                .setVibrate(if (mode == ReminderMode.VIBRATION || mode == ReminderMode.ALARM) longArrayOf(0, 500, 300, 500) else null)
+                .apply { if (mode == ReminderMode.ALARM) { setCategory(NotificationCompat.CATEGORY_ALARM); setOngoing(true); setFullScreenIntent(alarmIntent, true) } }
                 .setAutoCancel(true).build())
+            if (mode == ReminderMode.ALARM) context.startActivity(Intent(context, AlarmActivity::class.java).putExtras(intent.extras ?: android.os.Bundle()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
         }
         scheduler.schedule(Goal(
             id = id, title = title, timesPerDay = required,
@@ -95,6 +104,7 @@ class ReminderReceiver : BroadcastReceiver() {
             repeatInterval = intent.getIntExtra(REPEAT_INTERVAL, 1), reminderTimeMinutes = minutes.takeIf { it >= 0 },
             weekdaysMask = intent.getIntExtra(WEEKDAYS, 127), monthDay = intent.getIntExtra(MONTH_DAY, 1),
             executionTimes = listOfNotNull(minutes.takeIf { it >= 0 }),
+            reminderMode = mode, alarmSoundUri = intent.getStringExtra(SOUND_URI), alarmSoundName = intent.getStringExtra(SOUND_NAME),
         ))
     }
 
@@ -102,7 +112,9 @@ class ReminderReceiver : BroadcastReceiver() {
         const val GOAL_ID = "goal_id"; const val GOAL_TITLE = "goal_title"; const val REQUIRED = "required"
         const val REMINDER_MINUTES = "reminder_minutes"; const val START_DAY = "start_day"
         const val REPEAT_INTERVAL = "repeat_interval"; const val RECURRENCE = "recurrence"
-        const val WEEKDAYS = "weekdays"; const val MONTH_DAY = "month_day"; const val REQUEST_CODE = "request_code"; private const val CHANNEL = "goal_reminders"
+        const val WEEKDAYS = "weekdays"; const val MONTH_DAY = "month_day"; const val REQUEST_CODE = "request_code"
+        const val REMINDER_MODE = "reminder_mode"; const val SOUND_URI = "sound_uri"; const val SOUND_NAME = "sound_name"
+        private const val CHANNEL = "goal_reminders_silent"; private const val VIBRATION_CHANNEL = "goal_reminders_vibration"; private const val ALARM_CHANNEL = "goal_reminders_alarm"
         const val ACTION_TRIGGER = "com.ritmo.app.reminder.TRIGGER"
         const val ACTION_COMPLETE = "com.ritmo.app.reminder.COMPLETE"
         const val ACTION_SNOOZE = "com.ritmo.app.reminder.SNOOZE"

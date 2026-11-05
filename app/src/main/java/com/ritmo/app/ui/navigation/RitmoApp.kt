@@ -15,20 +15,22 @@ import androidx.navigation.navArgument
 
 private const val HOME = "home"
 private const val ADD_GOAL = "goal/new"
+private const val EDIT_GOAL = "goal/{goalId}/edit"
 private const val CALENDAR = "calendar"
 private const val STATISTICS = "statistics"
 private const val GOAL_DETAILS = "goal/{goalId}"
 private const val SETTINGS = "settings"
 
 @Composable
-fun RitmoApp() {
+fun RitmoApp(openSettings: Boolean = false) {
     val nav = rememberNavController()
-    NavHost(nav, startDestination = HOME) {
+    NavHost(nav, startDestination = if (openSettings) SETTINGS else HOME) {
         composable(HOME) { HomeScreen(onAddGoal = { nav.navigate(ADD_GOAL) }, onCalendar = { nav.navigate(CALENDAR) }, onStatistics = { nav.navigate(STATISTICS) }, onSettings = { nav.navigate(SETTINGS) }, onGoal = { nav.navigate("goal/$it") }) }
         composable(ADD_GOAL) { GoalEditorScreen(onBack = { nav.popBackStack() }) }
+        composable(EDIT_GOAL, arguments = listOf(navArgument("goalId") { type = NavType.LongType })) { backStack -> GoalEditorScreen(goalId = backStack.arguments?.getLong("goalId") ?: 0, onBack = { nav.popBackStack() }) }
         composable(CALENDAR) { CalendarScreen(onBack = { nav.popBackStack() }, onGoal = { nav.navigate("goal/$it") }) }
         composable(STATISTICS) { StatisticsScreen(onBack = { nav.popBackStack() }, onGoal = { nav.navigate("goal/$it") }) }
-        composable(GOAL_DETAILS, arguments = listOf(navArgument("goalId") { type = NavType.LongType })) { GoalDetailsScreen(onBack = { nav.popBackStack() }) }
+        composable(GOAL_DETAILS, arguments = listOf(navArgument("goalId") { type = NavType.LongType })) { backStack -> val id = backStack.arguments?.getLong("goalId") ?: 0; GoalDetailsScreen(onBack = { nav.popBackStack() }, onEdit = { nav.navigate("goal/$id/edit") }) }
         composable(SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
     }
 }

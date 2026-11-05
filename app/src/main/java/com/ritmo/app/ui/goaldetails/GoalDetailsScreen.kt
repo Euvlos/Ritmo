@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,11 +17,11 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GoalDetailsScreen(onBack: () -> Unit, viewModel: GoalDetailsViewModel = hiltViewModel()) {
+fun GoalDetailsScreen(onBack: () -> Unit, onEdit: () -> Unit, viewModel: GoalDetailsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState(); val goal = state.goal
     var confirmDelete by remember { mutableStateOf(false) }
     if (confirmDelete && goal != null) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("Удалить цель?") }, text = { Text("Цель «${goal.title}» исчезнет из активных целей, а её история останется в аналитике.") }, confirmButton = { TextButton(onClick = { confirmDelete = false; viewModel.delete(goal, onBack) }) { Text("Удалить", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } })
-    Scaffold(topBar = { TopAppBar(title = { Text(goal?.title ?: "Цель") }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }, actions = { if (goal != null && goal.status == com.ritmo.app.domain.model.GoalStatus.ACTIVE) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Удалить цель") } }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(goal?.title ?: "Цель") }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }, actions = { if (goal != null && goal.status == com.ritmo.app.domain.model.GoalStatus.ACTIVE) { IconButton(onClick = onEdit) { Icon(Icons.Rounded.Edit, "Редактировать цель") }; IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Удалить цель") } } }) }) { padding ->
         if (goal == null) { Box(Modifier.fillMaxSize().padding(padding).padding(20.dp)) { CircularProgressIndicator() }; return@Scaffold }
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { AnalyticsPeriodSelector(state.range, viewModel::period, viewModel::custom) }

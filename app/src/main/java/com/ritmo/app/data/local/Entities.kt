@@ -8,6 +8,7 @@ import com.ritmo.app.domain.model.Goal
 import com.ritmo.app.domain.model.GoalStatus
 import com.ritmo.app.domain.model.GoalType
 import com.ritmo.app.domain.model.RecurrenceType
+import com.ritmo.app.domain.model.ReminderMode
 import java.time.Instant
 import java.time.LocalDate
 
@@ -28,6 +29,9 @@ data class GoalEntity(
     val weekdaysMask: Int = 0b1111111,
     val monthDay: Int = 1,
     val archivedEpochDay: Long? = null,
+    val reminderMode: ReminderMode = ReminderMode.NOTIFICATION,
+    val alarmSoundUri: String? = null,
+    val alarmSoundName: String? = null,
 )
 
 @Entity(
@@ -86,5 +90,5 @@ data class SnoozedOccurrenceEntity(
     val snoozedUntil: Instant,
 )
 
-fun GoalEntity.toDomain() = Goal(id, title, type, targetValue, unit, color, LocalDate.ofEpochDay(startEpochDay), status, recurrenceType, repeatInterval, timesPerDay, reminderTimeMinutes, weekdaysMask, monthDay, archivedDate = archivedEpochDay?.let(LocalDate::ofEpochDay))
-fun Goal.toEntity() = GoalEntity(id, title.trim(), type, targetValue.coerceAtLeast(1), unit.trim(), color, startDate.toEpochDay(), status, recurrenceType, repeatInterval.coerceAtLeast(1), timesPerDay.coerceAtLeast(1), reminderTimeMinutes, weekdaysMask, monthDay.coerceIn(1, 31))
+fun GoalEntity.toDomain() = Goal(id, title, type, targetValue, unit, color, LocalDate.ofEpochDay(startEpochDay), status, recurrenceType, repeatInterval, timesPerDay, reminderTimeMinutes, weekdaysMask, monthDay, archivedDate = archivedEpochDay?.let(LocalDate::ofEpochDay), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName)
+fun Goal.toEntity() = GoalEntity(id, title.trim(), type, targetValue.coerceAtLeast(1), unit.trim(), color, startDate.toEpochDay(), status, recurrenceType, repeatInterval.coerceAtLeast(1), timesPerDay.coerceAtLeast(1), reminderTimeMinutes, weekdaysMask, monthDay.coerceIn(1, 31), archivedEpochDay = archivedDate?.toEpochDay(), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName)

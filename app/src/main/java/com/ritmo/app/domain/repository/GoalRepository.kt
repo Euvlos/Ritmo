@@ -13,6 +13,8 @@ data class SnoozeRecord(val goalId: Long, val date: LocalDate, val slotTimeMinut
 interface GoalRepository {
     fun observeDay(date: LocalDate): Flow<List<DailyGoal>>
     suspend fun create(goal: Goal): Long
+    suspend fun get(goalId: Long): Goal?
+    suspend fun update(goal: Goal)
     suspend fun delete(goal: Goal)
     suspend fun increment(goalId: Long, date: LocalDate)
     suspend fun decrement(goalId: Long, date: LocalDate)

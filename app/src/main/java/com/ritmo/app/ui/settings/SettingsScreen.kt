@@ -16,11 +16,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ritmo.app.R
 import com.ritmo.app.settings.*
+import com.ritmo.app.updates.*
+import com.ritmo.app.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState(); val context = LocalContext.current
+    val updateState by viewModel.updates.state.collectAsState()
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
@@ -48,6 +51,20 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     ColorSlider("R", red) { red = it; viewModel.customColor(rgb(red, green, blue)) }
                     ColorSlider("G", green) { green = it; viewModel.customColor(rgb(red, green, blue)) }
                     ColorSlider("B", blue) { blue = it; viewModel.customColor(rgb(red, green, blue)) }
+                }
+            }
+            item {
+                SettingsCard("Обновления", Icons.Rounded.SystemUpdate) {
+                    Text("Установлена версия ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when (val update = updateState) {
+                        UpdateState.Idle -> Button(viewModel::checkUpdates, Modifier.fillMaxWidth()) { Text("Проверить обновления") }
+                        UpdateState.Checking -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                        UpdateState.UpToDate -> { Text("Установлена последняя версия"); OutlinedButton(viewModel::checkUpdates, Modifier.fillMaxWidth()) { Text("Проверить снова") } }
+                        is UpdateState.Available -> { Text("Доступна версия ${update.info.version}", style = MaterialTheme.typography.titleMedium); Button({ viewModel.install(update.info) }, Modifier.fillMaxWidth()) { Icon(Icons.Rounded.Download, null); Spacer(Modifier.width(8.dp)); Text("Скачать и установить") } }
+                        UpdateState.Downloading -> { Text("Скачиваем APK…"); LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                        is UpdateState.Error -> { Text(update.message, color = MaterialTheme.colorScheme.error); OutlinedButton(viewModel::checkUpdates, Modifier.fillMaxWidth()) { Text("Повторить") } }
+                    }
+                    Text("Проверка и загрузка выполняются напрямую через GitHub Releases.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             item {

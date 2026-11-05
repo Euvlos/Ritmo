@@ -29,18 +29,24 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ritmo.app.domain.model.GoalType
 import com.ritmo.app.domain.model.RecurrenceType
+import com.ritmo.app.domain.model.ReminderMode
 import com.ritmo.app.domain.model.dayWord
 import com.ritmo.app.domain.model.timesWord
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GoalEditorScreen(onBack: () -> Unit, viewModel: GoalEditorViewModel = hiltViewModel()) {
+fun GoalEditorScreen(goalId: Long = 0, onBack: () -> Unit, viewModel: GoalEditorViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState(); val context = LocalContext.current
+    LaunchedEffect(goalId) { viewModel.load(goalId) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val customSound = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::importSound) }
+    val systemSound = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getParcelableExtra<Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)?.let { uri -> viewModel.alarmSound(uri.toString(), android.media.RingtoneManager.getRingtone(context, uri)?.getTitle(context) ?: "Системный будильник") }
+    }
     Scaffold(
-        topBar = { TopAppBar(title = { Column { Text("Новая цель"); Text("Настрой под свой ритм", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }) },
-        bottomBar = { Surface(shadowElevation = 10.dp) { Button({ viewModel.save(onBack) }, Modifier.navigationBarsPadding().padding(16.dp).fillMaxWidth().height(56.dp), enabled = !state.saving) { if (state.saving) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else { Icon(Icons.Rounded.Check, null); Spacer(Modifier.width(8.dp)); Text("Создать цель") } } } },
+        topBar = { TopAppBar(title = { Column { Text(if (goalId == 0L) "Новая цель" else "Редактировать цель"); Text("Настрой под свой ритм", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }) },
+        bottomBar = { Surface(shadowElevation = 10.dp) { Button({ viewModel.save(onBack) }, Modifier.navigationBarsPadding().padding(16.dp).fillMaxWidth().height(56.dp), enabled = !state.saving && !state.loading) { if (state.saving || state.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else { Icon(Icons.Rounded.Check, null); Spacer(Modifier.width(8.dp)); Text(if (goalId == 0L) "Создать цель" else "Сохранить") } } } },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             PreviewCard(state)
@@ -94,6 +100,25 @@ fun GoalEditorScreen(onBack: () -> Unit, viewModel: GoalEditorViewModel = hiltVi
                 } else {
                     val time = state.reminderTimeMinutes!!
                     Surface(Modifier.fillMaxWidth().clickable { pickTime(context, time, viewModel::reminder) }, color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Alarm, null); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(String.format(Locale.ROOT, "%02d:%02d", time / 60, time % 60), style = MaterialTheme.typography.titleLarge); Text("Нажми, чтобы изменить", style = MaterialTheme.typography.bodySmall) }; IconButton({ viewModel.reminder(null) }) { Icon(Icons.Rounded.Close, "Убрать") } } }
+                }
+            }
+            if (state.bindToTimes || state.reminderTimeMinutes != null) SectionCard("Тип напоминания", Icons.Rounded.Alarm) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    listOf(ReminderMode.NOTIFICATION to "Тихое", ReminderMode.VIBRATION to "Вибрация", ReminderMode.ALARM to "Будильник").forEachIndexed { index, item ->
+                        SegmentedButton(state.reminderMode == item.first, { viewModel.reminderMode(item.first) }, SegmentedButtonDefaults.itemShape(index, 3)) { Text(item.second) }
+                    }
+                }
+                Text(when (state.reminderMode) { ReminderMode.NOTIFICATION -> "Обычное уведомление без вибрации"; ReminderMode.VIBRATION -> "Уведомление с вибрацией"; ReminderMode.ALARM -> "Полноэкранный будильник со звуком" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state.reminderMode == ReminderMode.ALARM) {
+                    Text("Мелодия: ${state.alarmSoundName ?: "Стандартный звук будильника"}", fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({ systemSound.launch(Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALARM).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)) }, Modifier.weight(1f)) { Text("Системная") }
+                        OutlinedButton({ customSound.launch(arrayOf("audio/*")) }, Modifier.weight(1f)) { Text("С устройства") }
+                    }
+                    if (state.customSounds.isNotEmpty()) {
+                        Text("Моя библиотека", style = MaterialTheme.typography.labelLarge)
+                        state.customSounds.forEach { sound -> FilterChip(state.alarmSoundUri == sound.uri, { viewModel.alarmSound(sound.uri, sound.name) }, { Text(sound.name) }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null) }) }
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))

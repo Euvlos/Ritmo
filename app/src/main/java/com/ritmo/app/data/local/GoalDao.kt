@@ -2,6 +2,7 @@ package com.ritmo.app.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.Update
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -20,6 +21,10 @@ data class GoalWithProgress(
     val reminderTimeMinutes: Int?,
     val weekdaysMask: Int,
     val monthDay: Int,
+    val archivedEpochDay: Long?,
+    val reminderMode: com.ritmo.app.domain.model.ReminderMode,
+    val alarmSoundUri: String?,
+    val alarmSoundName: String?,
     val completed: Int,
 )
 
@@ -43,12 +48,15 @@ interface GoalDao {
     suspend fun getForDay(epochDay: Long): List<GoalWithProgress>
 
     @Insert suspend fun insertGoal(goal: GoalEntity): Long
+    @Update suspend fun updateGoal(goal: GoalEntity)
     @Insert suspend fun insertCompletion(completion: CompletionEntity): Long
     @Insert suspend fun insertSlots(slots: List<ScheduleSlotEntity>)
     @Insert suspend fun insertSkip(skip: SkippedOccurrenceEntity): Long
     @Insert suspend fun insertSnooze(snooze: SnoozedOccurrenceEntity): Long
 
     @Query("SELECT * FROM goals WHERE id = :id LIMIT 1") suspend fun getGoal(id: Long): GoalEntity?
+    @Query("SELECT * FROM schedule_slots WHERE goalId = :goalId ORDER BY sortOrder") suspend fun getSlots(goalId: Long): List<ScheduleSlotEntity>
+    @Query("DELETE FROM schedule_slots WHERE goalId = :goalId") suspend fun deleteSlots(goalId: Long)
     @Query("UPDATE goals SET status = 'ARCHIVED', archivedEpochDay = :epochDay WHERE id = :id AND status = 'ACTIVE'") suspend fun archiveGoal(id: Long, epochDay: Long)
 
     @Query("SELECT * FROM goals WHERE status = 'ACTIVE' ORDER BY id DESC") fun observeGoals(): Flow<List<GoalEntity>>

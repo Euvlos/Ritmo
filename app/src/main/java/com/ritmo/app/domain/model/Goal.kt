@@ -5,6 +5,7 @@ import java.time.LocalDate
 enum class GoalType { SIMPLE, COUNTER }
 enum class GoalStatus { ACTIVE, PAUSED, ARCHIVED }
 enum class RecurrenceType { DAILY, INTERVAL_DAYS, INTERVAL_WEEKS, MONTHLY }
+enum class ReminderMode { NOTIFICATION, VIBRATION, ALARM }
 
 data class Goal(
     val id: Long = 0,
@@ -23,6 +24,9 @@ data class Goal(
     val monthDay: Int = 1,
     val executionTimes: List<Int> = emptyList(),
     val archivedDate: LocalDate? = null,
+    val reminderMode: ReminderMode = ReminderMode.NOTIFICATION,
+    val alarmSoundUri: String? = null,
+    val alarmSoundName: String? = null,
 )
 
 fun Goal.isScheduledOn(date: LocalDate): Boolean = when {

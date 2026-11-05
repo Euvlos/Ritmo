@@ -1,6 +1,7 @@
 package com.ritmo.app
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         applyAppLanguage(this, runBlocking { settingsStore.current().language })
         enableEdgeToEdge()
-        setContent { val settings by settingsStore.settings.collectAsState(initial = runBlocking { settingsStore.current() }); RitmoTheme(settings.themeMode, settings.accent, settings.customColor) { RitmoApp() } }
+        setContent { val settings by settingsStore.settings.collectAsState(initial = runBlocking { settingsStore.current() }); RitmoTheme(settings.themeMode, settings.accent, settings.customColor) { RitmoApp(openSettings = intent?.data?.scheme == "ritmo") } }
     }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); recreate() }
 }
