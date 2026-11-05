@@ -16,6 +16,7 @@ import com.ritmo.app.R
 import com.ritmo.app.domain.model.Goal
 import com.ritmo.app.domain.model.RecurrenceType
 import com.ritmo.app.domain.model.ReminderMode
+import com.ritmo.app.domain.model.GoalReminder
 import com.ritmo.app.data.local.GoalDao
 import com.ritmo.app.data.local.CompletionEntity
 import com.ritmo.app.data.local.SkippedOccurrenceEntity
@@ -87,10 +88,14 @@ class ReminderReceiver : BroadcastReceiver() {
                 .setContentTitle(title)
                 .setContentText(context.resources.getQuantityString(R.plurals.reminder_progress, required, required))
                 .setContentIntent(open)
+                .setCategory(if (mode == ReminderMode.ALARM) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_REMINDER)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setLocalOnly(false)
+                .setGroup("ritmo_goal_reminders")
                 .addAction(completeAction)
                 .addAction(0, "Отложить", snooze)
                 .addAction(0, "Пропустить", skip)
-                .extend(NotificationCompat.WearableExtender().addAction(completeAction))
+                .extend(NotificationCompat.WearableExtender().addAction(completeAction).setHintContentIntentLaunchesActivity(true))
                 .setPriority(if (mode == ReminderMode.ALARM) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_DEFAULT)
                 .setVibrate(if (mode == ReminderMode.VIBRATION || mode == ReminderMode.ALARM) longArrayOf(0, 500, 300, 500) else null)
                 .apply { if (mode == ReminderMode.ALARM) { setCategory(NotificationCompat.CATEGORY_ALARM); setOngoing(true); setFullScreenIntent(alarmIntent, true) } }
@@ -105,6 +110,7 @@ class ReminderReceiver : BroadcastReceiver() {
             weekdaysMask = intent.getIntExtra(WEEKDAYS, 127), monthDay = intent.getIntExtra(MONTH_DAY, 1),
             executionTimes = listOfNotNull(minutes.takeIf { it >= 0 }),
             reminderMode = mode, alarmSoundUri = intent.getStringExtra(SOUND_URI), alarmSoundName = intent.getStringExtra(SOUND_NAME),
+            reminders = listOfNotNull(minutes.takeIf { it >= 0 }?.let { GoalReminder(it, mode, intent.getStringExtra(SOUND_URI), intent.getStringExtra(SOUND_NAME)) }),
         ))
     }
 

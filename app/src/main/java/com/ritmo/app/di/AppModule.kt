@@ -62,8 +62,17 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE goals ADD COLUMN alarmSoundName TEXT DEFAULT NULL")
         }
     }
+    private val migration8To9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE goals ADD COLUMN earlyCompletionMinutes INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE schedule_slots ADD COLUMN reminderMode TEXT NOT NULL DEFAULT 'NOTIFICATION'")
+            db.execSQL("ALTER TABLE schedule_slots ADD COLUMN alarmSoundUri TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE schedule_slots ADD COLUMN alarmSoundName TEXT DEFAULT NULL")
+            db.execSQL("UPDATE schedule_slots SET reminderMode = (SELECT reminderMode FROM goals WHERE goals.id = schedule_slots.goalId), alarmSoundUri = (SELECT alarmSoundUri FROM goals WHERE goals.id = schedule_slots.goalId), alarmSoundName = (SELECT alarmSoundName FROM goals WHERE goals.id = schedule_slots.goalId)")
+        }
+    }
     @Provides @Singleton fun database(@ApplicationContext context: Context): RitmoDatabase =
-        Room.databaseBuilder(context, RitmoDatabase::class.java, "ritmo.db").addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8).build()
+        Room.databaseBuilder(context, RitmoDatabase::class.java, "ritmo.db").addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9).build()
     @Provides fun goalDao(database: RitmoDatabase): GoalDao = database.goalDao()
 }
 

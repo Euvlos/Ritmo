@@ -40,9 +40,13 @@ fun GoalEditorScreen(goalId: Long = 0, onBack: () -> Unit, viewModel: GoalEditor
     val state by viewModel.state.collectAsState(); val context = LocalContext.current
     LaunchedEffect(goalId) { viewModel.load(goalId) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    val customSound = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(viewModel::importSound) }
+    var soundSlotIndex by remember { mutableStateOf<Int?>(null) }
+    val customSound = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importSound(it, soundSlotIndex) } }
     val systemSound = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        result.data?.getParcelableExtra<Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)?.let { uri -> viewModel.alarmSound(uri.toString(), android.media.RingtoneManager.getRingtone(context, uri)?.getTitle(context) ?: "Системный будильник") }
+        result.data?.getParcelableExtra<Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)?.let { uri ->
+            val name = android.media.RingtoneManager.getRingtone(context, uri)?.getTitle(context) ?: "Системный будильник"
+            soundSlotIndex?.let { viewModel.slotSound(it, uri.toString(), name) } ?: viewModel.alarmSound(uri.toString(), name)
+        }
     }
     Scaffold(
         topBar = { TopAppBar(title = { Column { Text(if (goalId == 0L) "Новая цель" else "Редактировать цель"); Text("Настрой под свой ритм", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }) },
@@ -90,7 +94,25 @@ fun GoalEditorScreen(goalId: Long = 0, onBack: () -> Unit, viewModel: GoalEditor
                         Surface(Modifier.fillMaxWidth().clickable { pickTime(context, time) { viewModel.executionTime(index, it) } }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
                             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(32.dp), CircleShape, MaterialTheme.colorScheme.secondary) { Box(contentAlignment = Alignment.Center) { Text("${index + 1}", color = MaterialTheme.colorScheme.onSecondary) } }; Spacer(Modifier.width(12.dp)); Text("Выполнение ${index + 1}", Modifier.weight(1f)); Text(String.format(Locale.ROOT, "%02d:%02d", time / 60, time % 60), style = MaterialTheme.typography.titleMedium); Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp)) }
                         }
+                        val reminder = state.slotReminders.getOrNull(index)
+                        if (reminder != null) {
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                listOf(ReminderMode.NOTIFICATION to "Тихое", ReminderMode.VIBRATION to "Вибро", ReminderMode.ALARM to "Будильник").forEachIndexed { modeIndex, item ->
+                                    SegmentedButton(reminder.mode == item.first, { viewModel.slotMode(index, item.first) }, SegmentedButtonDefaults.itemShape(modeIndex, 3)) { Text(item.second) }
+                                }
+                            }
+                            if (reminder.mode == ReminderMode.ALARM) {
+                                Text("Мелодия: ${reminder.soundName ?: "Стандартный будильник"}", style = MaterialTheme.typography.bodyMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton({ soundSlotIndex = index; systemSound.launch(ringtonePickerIntent()) }, Modifier.weight(1f)) { Text("Системная") }
+                                    OutlinedButton({ soundSlotIndex = index; customSound.launch(arrayOf("audio/*")) }, Modifier.weight(1f)) { Text("С устройства") }
+                                }
+                                state.customSounds.forEach { sound -> FilterChip(reminder.soundUri == sound.uri, { viewModel.slotSound(index, sound.uri, sound.name) }, { Text(sound.name) }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null) }) }
+                            }
+                            HorizontalDivider()
+                        }
                     }
+                    LabeledSlider("Насколько заранее можно отметить", state.earlyCompletionMinutes, 0..720, viewModel::earlyCompletion, earlyCompletionText(state.earlyCompletionMinutes))
                 }
             }
             if (!state.bindToTimes) SectionCard("Отдельное напоминание", Icons.Rounded.Notifications) {
@@ -102,7 +124,7 @@ fun GoalEditorScreen(goalId: Long = 0, onBack: () -> Unit, viewModel: GoalEditor
                     Surface(Modifier.fillMaxWidth().clickable { pickTime(context, time, viewModel::reminder) }, color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Alarm, null); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(String.format(Locale.ROOT, "%02d:%02d", time / 60, time % 60), style = MaterialTheme.typography.titleLarge); Text("Нажми, чтобы изменить", style = MaterialTheme.typography.bodySmall) }; IconButton({ viewModel.reminder(null) }) { Icon(Icons.Rounded.Close, "Убрать") } } }
                 }
             }
-            if (state.bindToTimes || state.reminderTimeMinutes != null) SectionCard("Тип напоминания", Icons.Rounded.Alarm) {
+            if (!state.bindToTimes && state.reminderTimeMinutes != null) SectionCard("Тип напоминания", Icons.Rounded.Alarm) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     listOf(ReminderMode.NOTIFICATION to "Тихое", ReminderMode.VIBRATION to "Вибрация", ReminderMode.ALARM to "Будильник").forEachIndexed { index, item ->
                         SegmentedButton(state.reminderMode == item.first, { viewModel.reminderMode(item.first) }, SegmentedButtonDefaults.itemShape(index, 3)) { Text(item.second) }
@@ -112,8 +134,8 @@ fun GoalEditorScreen(goalId: Long = 0, onBack: () -> Unit, viewModel: GoalEditor
                 if (state.reminderMode == ReminderMode.ALARM) {
                     Text("Мелодия: ${state.alarmSoundName ?: "Стандартный звук будильника"}", fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton({ systemSound.launch(Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALARM).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)) }, Modifier.weight(1f)) { Text("Системная") }
-                        OutlinedButton({ customSound.launch(arrayOf("audio/*")) }, Modifier.weight(1f)) { Text("С устройства") }
+                        OutlinedButton({ soundSlotIndex = null; systemSound.launch(ringtonePickerIntent()) }, Modifier.weight(1f)) { Text("Системная") }
+                        OutlinedButton({ soundSlotIndex = null; customSound.launch(arrayOf("audio/*")) }, Modifier.weight(1f)) { Text("С устройства") }
                     }
                     if (state.customSounds.isNotEmpty()) {
                         Text("Моя библиотека", style = MaterialTheme.typography.labelLarge)
@@ -154,3 +176,5 @@ private fun requestExactAlarmAccess(context: android.content.Context) {
         if (!alarm.canScheduleExactAlarms()) context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))
     }
 }
+private fun ringtonePickerIntent() = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALARM).putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+private fun earlyCompletionText(minutes: Int) = when { minutes == 0 -> "Только после наступления времени"; minutes < 60 -> "За $minutes мин"; minutes % 60 == 0 -> "За ${minutes / 60} ч"; else -> "За ${minutes / 60} ч ${minutes % 60} мин" }

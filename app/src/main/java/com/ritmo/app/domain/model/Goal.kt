@@ -27,6 +27,15 @@ data class Goal(
     val reminderMode: ReminderMode = ReminderMode.NOTIFICATION,
     val alarmSoundUri: String? = null,
     val alarmSoundName: String? = null,
+    val reminders: List<GoalReminder> = emptyList(),
+    val earlyCompletionMinutes: Int = 0,
+)
+
+data class GoalReminder(
+    val timeMinutes: Int,
+    val mode: ReminderMode = ReminderMode.NOTIFICATION,
+    val soundUri: String? = null,
+    val soundName: String? = null,
 )
 
 fun Goal.isScheduledOn(date: LocalDate): Boolean = when {
@@ -73,7 +82,7 @@ val Goal.requiredProgress: Int get() = if (type == GoalType.SIMPLE) timesPerDay.
 
 fun Goal.availableProgressAt(minuteOfDay: Int): Int {
     if (executionTimes.isEmpty()) return requiredProgress
-    val availableSlots = executionTimes.count { it <= minuteOfDay }
+    val availableSlots = executionTimes.count { it <= minuteOfDay + earlyCompletionMinutes }
     if (availableSlots == 0) return 0
     return if (type == GoalType.SIMPLE) availableSlots.coerceAtMost(requiredProgress)
     else kotlin.math.ceil(requiredProgress.toDouble() * availableSlots / executionTimes.size).toInt().coerceAtMost(requiredProgress)

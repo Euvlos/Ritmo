@@ -32,6 +32,7 @@ data class GoalEntity(
     val reminderMode: ReminderMode = ReminderMode.NOTIFICATION,
     val alarmSoundUri: String? = null,
     val alarmSoundName: String? = null,
+    val earlyCompletionMinutes: Int = 0,
 )
 
 @Entity(
@@ -61,6 +62,9 @@ data class ScheduleSlotEntity(
     val goalId: Long,
     val localTimeMinutes: Int,
     val sortOrder: Int,
+    val reminderMode: ReminderMode = ReminderMode.NOTIFICATION,
+    val alarmSoundUri: String? = null,
+    val alarmSoundName: String? = null,
 )
 
 @Entity(
@@ -90,5 +94,5 @@ data class SnoozedOccurrenceEntity(
     val snoozedUntil: Instant,
 )
 
-fun GoalEntity.toDomain() = Goal(id, title, type, targetValue, unit, color, LocalDate.ofEpochDay(startEpochDay), status, recurrenceType, repeatInterval, timesPerDay, reminderTimeMinutes, weekdaysMask, monthDay, archivedDate = archivedEpochDay?.let(LocalDate::ofEpochDay), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName)
-fun Goal.toEntity() = GoalEntity(id, title.trim(), type, targetValue.coerceAtLeast(1), unit.trim(), color, startDate.toEpochDay(), status, recurrenceType, repeatInterval.coerceAtLeast(1), timesPerDay.coerceAtLeast(1), reminderTimeMinutes, weekdaysMask, monthDay.coerceIn(1, 31), archivedEpochDay = archivedDate?.toEpochDay(), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName)
+fun GoalEntity.toDomain() = Goal(id, title, type, targetValue, unit, color, LocalDate.ofEpochDay(startEpochDay), status, recurrenceType, repeatInterval, timesPerDay, reminderTimeMinutes, weekdaysMask, monthDay, archivedDate = archivedEpochDay?.let(LocalDate::ofEpochDay), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName, earlyCompletionMinutes = earlyCompletionMinutes)
+fun Goal.toEntity() = GoalEntity(id, title.trim(), type, targetValue.coerceAtLeast(1), unit.trim(), color, startDate.toEpochDay(), status, recurrenceType, repeatInterval.coerceAtLeast(1), timesPerDay.coerceAtLeast(1), reminderTimeMinutes, weekdaysMask, monthDay.coerceIn(1, 31), archivedEpochDay = archivedDate?.toEpochDay(), reminderMode = reminderMode, alarmSoundUri = alarmSoundUri, alarmSoundName = alarmSoundName, earlyCompletionMinutes = earlyCompletionMinutes)

@@ -8,6 +8,7 @@ import android.content.Intent
 import com.ritmo.app.domain.model.Goal
 import com.ritmo.app.domain.model.isScheduledOn
 import com.ritmo.app.domain.model.requiredProgress
+import com.ritmo.app.domain.model.GoalReminder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -31,11 +32,12 @@ class ReminderScheduler @Inject constructor(@ApplicationContext private val cont
         }
     }
     fun schedule(goal: Goal, after: LocalDateTime = LocalDateTime.now()) {
-        val times = goal.executionTimes.ifEmpty { listOfNotNull(goal.reminderTimeMinutes) }
-        times.forEach { scheduleAt(goal, it, after) }
+        val reminders = if (goal.executionTimes.isNotEmpty()) goal.executionTimes.mapIndexed { index, time -> goal.reminders.getOrNull(index) ?: GoalReminder(time, goal.reminderMode, goal.alarmSoundUri, goal.alarmSoundName) } else listOfNotNull(goal.reminderTimeMinutes?.let { GoalReminder(it, goal.reminderMode, goal.alarmSoundUri, goal.alarmSoundName) })
+        reminders.forEach { scheduleAt(goal, it, after) }
     }
 
-    private fun scheduleAt(goal: Goal, minutes: Int, after: LocalDateTime) {
+    private fun scheduleAt(goal: Goal, reminder: GoalReminder, after: LocalDateTime) {
+        val minutes = reminder.timeMinutes
         val time = LocalTime.of(minutes / 60, minutes % 60)
         var date = maxOf(LocalDate.now(), goal.startDate)
         var next = LocalDateTime.of(date, time)
@@ -51,9 +53,9 @@ class ReminderScheduler @Inject constructor(@ApplicationContext private val cont
             .putExtra(ReminderReceiver.RECURRENCE, goal.recurrenceType.name)
             .putExtra(ReminderReceiver.WEEKDAYS, goal.weekdaysMask)
             .putExtra(ReminderReceiver.MONTH_DAY, goal.monthDay)
-            .putExtra(ReminderReceiver.REMINDER_MODE, goal.reminderMode.name)
-            .putExtra(ReminderReceiver.SOUND_URI, goal.alarmSoundUri)
-            .putExtra(ReminderReceiver.SOUND_NAME, goal.alarmSoundName)
+            .putExtra(ReminderReceiver.REMINDER_MODE, reminder.mode.name)
+            .putExtra(ReminderReceiver.SOUND_URI, reminder.soundUri)
+            .putExtra(ReminderReceiver.SOUND_NAME, reminder.soundName)
         val requestCode = ((goal.id * 1009 + minutes).and(0x7fffffff)).toInt()
         intent.putExtra(ReminderReceiver.REQUEST_CODE, requestCode)
         val pending = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

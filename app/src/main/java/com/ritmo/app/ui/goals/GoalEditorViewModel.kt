@@ -6,6 +6,7 @@ import com.ritmo.app.domain.model.Goal
 import com.ritmo.app.domain.model.GoalType
 import com.ritmo.app.domain.model.RecurrenceType
 import com.ritmo.app.domain.model.ReminderMode
+import com.ritmo.app.domain.model.GoalReminder
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -42,6 +43,8 @@ data class GoalEditorState(
     val alarmSoundUri: String? = null,
     val alarmSoundName: String? = null,
     val customSounds: List<AlarmSound> = emptyList(),
+    val slotReminders: List<GoalReminder> = emptyList(),
+    val earlyCompletionMinutes: Int = 0,
 )
 data class AlarmSound(val uri: String, val name: String)
 
@@ -59,27 +62,31 @@ class GoalEditorViewModel @Inject constructor(private val repository: GoalReposi
     fun interval(value: Int) = _state.update { it.copy(repeatInterval = value.coerceIn(1, 365)) }
     fun times(value: Int) = _state.update {
         val count = value.coerceIn(1, 12)
-        it.copy(timesPerDay = count, executionTimes = if (it.bindToTimes) resizeTimes(it.executionTimes, count) else emptyList())
+        val times = if (it.bindToTimes) resizeTimes(it.executionTimes, count) else emptyList()
+        it.copy(timesPerDay = count, executionTimes = times, slotReminders = if (it.bindToTimes) resizeReminders(it.slotReminders, times) else emptyList())
     }
     fun reminder(value: Int?) = _state.update { it.copy(reminderTimeMinutes = value) }
     fun reminderMode(value: ReminderMode) = _state.update { it.copy(reminderMode = value) }
     fun alarmSound(uri: String?, name: String?) = _state.update { it.copy(alarmSoundUri = uri, alarmSoundName = name) }
+    fun slotMode(index: Int, mode: ReminderMode) = _state.update { state -> state.copy(slotReminders = state.slotReminders.toMutableList().also { list -> list[index] = list[index].copy(mode = mode) }) }
+    fun slotSound(index: Int, uri: String?, name: String?) = _state.update { state -> state.copy(slotReminders = state.slotReminders.toMutableList().also { list -> list[index] = list[index].copy(soundUri = uri, soundName = name) }) }
+    fun earlyCompletion(minutes: Int) = _state.update { it.copy(earlyCompletionMinutes = minutes.coerceIn(0, 720)) }
     fun load(goalId: Long) {
         if (goalId == 0L || state.value.goalId == goalId || state.value.loading) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             repository.get(goalId)?.let { goal ->
                 loadedGoal = goal
-                _state.value = GoalEditorState(title = goal.title, type = goal.type, targetValue = goal.targetValue, unit = goal.unit, recurrenceType = goal.recurrenceType, repeatInterval = goal.repeatInterval, timesPerDay = goal.timesPerDay, reminderTimeMinutes = goal.reminderTimeMinutes, weekdaysMask = goal.weekdaysMask, monthDay = goal.monthDay, bindToTimes = goal.executionTimes.isNotEmpty(), executionTimes = goal.executionTimes, goalId = goal.id, reminderMode = goal.reminderMode, alarmSoundUri = goal.alarmSoundUri, alarmSoundName = goal.alarmSoundName, customSounds = state.value.customSounds)
+                _state.value = GoalEditorState(title = goal.title, type = goal.type, targetValue = goal.targetValue, unit = goal.unit, recurrenceType = goal.recurrenceType, repeatInterval = goal.repeatInterval, timesPerDay = goal.timesPerDay, reminderTimeMinutes = goal.reminderTimeMinutes, weekdaysMask = goal.weekdaysMask, monthDay = goal.monthDay, bindToTimes = goal.executionTimes.isNotEmpty(), executionTimes = goal.executionTimes, goalId = goal.id, reminderMode = goal.reminderMode, alarmSoundUri = goal.alarmSoundUri, alarmSoundName = goal.alarmSoundName, customSounds = state.value.customSounds, slotReminders = goal.reminders, earlyCompletionMinutes = goal.earlyCompletionMinutes)
             } ?: _state.update { it.copy(loading = false) }
         }
     }
-    fun importSound(uri: Uri) = viewModelScope.launch {
+    fun importSound(uri: Uri, slotIndex: Int? = null) = viewModelScope.launch {
         val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: "Своя мелодия"
         val safeName = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
         val target = File(context.filesDir, "alarm_sounds/${System.currentTimeMillis()}_$safeName")
         withContext(Dispatchers.IO) { target.parentFile?.mkdirs(); context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use(input::copyTo) } }
-        alarmSound(Uri.fromFile(target).toString(), name)
+        if (slotIndex == null) alarmSound(Uri.fromFile(target).toString(), name) else slotSound(slotIndex, Uri.fromFile(target).toString(), name)
         refreshSounds()
     }
     private fun refreshSounds() {
@@ -92,9 +99,13 @@ class GoalEditorViewModel @Inject constructor(private val repository: GoalReposi
     }
     fun monthDay(value: Int) = _state.update { it.copy(monthDay = value.coerceIn(1, 31)) }
     fun bindToTimes(enabled: Boolean) = _state.update {
-        it.copy(bindToTimes = enabled, executionTimes = if (enabled) resizeTimes(it.executionTimes, it.timesPerDay) else emptyList(), reminderTimeMinutes = if (enabled) null else it.reminderTimeMinutes)
+        val times = if (enabled) resizeTimes(it.executionTimes, it.timesPerDay) else emptyList()
+        it.copy(bindToTimes = enabled, executionTimes = times, slotReminders = if (enabled) resizeReminders(it.slotReminders, times) else emptyList(), reminderTimeMinutes = if (enabled) null else it.reminderTimeMinutes)
     }
-    fun executionTime(index: Int, minutes: Int) = _state.update { state -> state.copy(executionTimes = state.executionTimes.toMutableList().also { it[index] = minutes }.sorted()) }
+    fun executionTime(index: Int, minutes: Int) = _state.update { state ->
+        val pairs = state.slotReminders.toMutableList().also { it[index] = it[index].copy(timeMinutes = minutes) }.sortedBy { it.timeMinutes }
+        state.copy(executionTimes = pairs.map { it.timeMinutes }, slotReminders = pairs)
+    }
     fun specificDays(enabled: Boolean) = _state.update { it.copy(recurrenceType = if (enabled) RecurrenceType.INTERVAL_WEEKS else RecurrenceType.INTERVAL_DAYS, repeatInterval = 1) }
     fun specificMode(value: RecurrenceType) = _state.update { it.copy(recurrenceType = value) }
     fun save(onSaved: () -> Unit) {
@@ -102,7 +113,7 @@ class GoalEditorViewModel @Inject constructor(private val repository: GoalReposi
         if (value.title.isBlank()) { _state.update { it.copy(titleError = true) }; return }
         viewModelScope.launch {
             _state.update { it.copy(saving = true) }
-            val goal = (loadedGoal ?: Goal(title = value.title)).copy(id = value.goalId, title = value.title, type = value.type, targetValue = value.targetValue, unit = value.unit.ifBlank { "раз" }, recurrenceType = value.recurrenceType, repeatInterval = value.repeatInterval, timesPerDay = value.timesPerDay, reminderTimeMinutes = value.reminderTimeMinutes, weekdaysMask = value.weekdaysMask, monthDay = value.monthDay, executionTimes = value.executionTimes, reminderMode = value.reminderMode, alarmSoundUri = value.alarmSoundUri, alarmSoundName = value.alarmSoundName)
+            val goal = (loadedGoal ?: Goal(title = value.title)).copy(id = value.goalId, title = value.title, type = value.type, targetValue = value.targetValue, unit = value.unit.ifBlank { "раз" }, recurrenceType = value.recurrenceType, repeatInterval = value.repeatInterval, timesPerDay = value.timesPerDay, reminderTimeMinutes = value.reminderTimeMinutes, weekdaysMask = value.weekdaysMask, monthDay = value.monthDay, executionTimes = value.executionTimes, reminderMode = value.reminderMode, alarmSoundUri = value.alarmSoundUri, alarmSoundName = value.alarmSoundName, reminders = value.slotReminders, earlyCompletionMinutes = value.earlyCompletionMinutes)
             if (value.goalId == 0L) repository.create(goal) else repository.update(goal)
             onSaved()
         }
@@ -113,4 +124,5 @@ class GoalEditorViewModel @Inject constructor(private val repository: GoalReposi
         val defaults = if (count == 1) listOf(9 * 60) else (0 until count).map { 8 * 60 + it * (12 * 60 / (count - 1)) }
         return (existing + defaults.drop(existing.size)).take(count).sorted()
     }
+    private fun resizeReminders(existing: List<GoalReminder>, times: List<Int>): List<GoalReminder> = times.mapIndexed { index, time -> existing.getOrNull(index)?.copy(timeMinutes = time) ?: GoalReminder(time) }
 }

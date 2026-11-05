@@ -21,6 +21,7 @@ import com.ritmo.app.domain.model.availableProgressAt
 import com.ritmo.app.domain.model.isScheduledOn
 import com.ritmo.app.domain.model.nextExecutionAfter
 import com.ritmo.app.domain.model.requiredProgress
+import com.ritmo.app.domain.model.GoalReminder
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.Instant
 import java.time.LocalDate
@@ -103,9 +104,10 @@ class RitmoWidgetProvider : AppWidgetProvider() {
     }
 
     private suspend fun todayGoals(): List<DailyGoal> {
-        val today = LocalDate.now(); val times = dao.getSlots().groupBy { it.goalId }.mapValues { row -> row.value.map { it.localTimeMinutes } }
+        val today = LocalDate.now(); val slots = dao.getSlots().groupBy { it.goalId }
         return dao.getForDay(today.toEpochDay()).map { row ->
-            val goal = GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay, row.archivedEpochDay, row.reminderMode, row.alarmSoundUri, row.alarmSoundName).toDomain().copy(executionTimes = times[row.id].orEmpty())
+            val goalSlots = slots[row.id].orEmpty()
+            val goal = GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay, row.archivedEpochDay, row.reminderMode, row.alarmSoundUri, row.alarmSoundName, row.earlyCompletionMinutes).toDomain().copy(executionTimes = goalSlots.map { it.localTimeMinutes }, reminders = goalSlots.map { GoalReminder(it.localTimeMinutes, it.reminderMode, it.alarmSoundUri, it.alarmSoundName) })
             DailyGoal(goal, row.completed)
         }.filter { it.goal.isScheduledOn(today) }
     }

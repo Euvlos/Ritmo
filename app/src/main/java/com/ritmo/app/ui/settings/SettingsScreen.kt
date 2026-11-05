@@ -18,6 +18,8 @@ import com.ritmo.app.R
 import com.ritmo.app.settings.*
 import com.ritmo.app.updates.*
 import com.ritmo.app.BuildConfig
+import android.content.Intent
+import android.provider.Settings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +67,13 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         is UpdateState.Error -> { Text(update.message, color = MaterialTheme.colorScheme.error); OutlinedButton(viewModel::checkUpdates, Modifier.fillMaxWidth()) { Text("Повторить") } }
                     }
                     Text("Проверка и загрузка выполняются напрямую через GitHub Releases.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            item {
+                SettingsCard("Часы и браслеты", Icons.Rounded.Watch) {
+                    Text("Ritmo отправляет публичные системные уведомления, которые могут зеркалировать Huawei Health, Galaxy Wearable, Zepp, Garmin Connect и Wear OS. Для Huawei Watch Fit включи Ritmo в списке уведомлений Huawei Health и сними ограничение батареи с Huawei Health.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button({ context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }, Modifier.fillMaxWidth()) { Text("Уведомления Ritmo") }
+                    OutlinedButton({ context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, Modifier.fillMaxWidth()) { Text("Доступ к уведомлениям") }
                 }
             }
             item {

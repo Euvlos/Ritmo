@@ -15,6 +15,7 @@ import java.time.LocalDate
 import com.ritmo.app.domain.model.isScheduledOn
 import com.ritmo.app.notifications.ReminderScheduler
 import com.ritmo.app.data.local.ScheduleSlotEntity
+import com.ritmo.app.domain.model.GoalReminder
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -26,10 +27,11 @@ import com.ritmo.app.widget.RitmoWidgetProvider
 class RoomGoalRepository @Inject constructor(private val dao: GoalDao, private val reminders: ReminderScheduler, @ApplicationContext private val context: Context) : GoalRepository {
     override fun observeDay(date: LocalDate): Flow<List<DailyGoal>> =
         combine(dao.observeForDay(date.toEpochDay()), dao.observeSlots()) { rows, slots ->
-            val times = slots.groupBy { it.goalId }.mapValues { it.value.map { slot -> slot.localTimeMinutes } }
+            val grouped = slots.groupBy { it.goalId }
             rows.map { row ->
+                val goalSlots = grouped[row.id].orEmpty()
                 DailyGoal(
-                    com.ritmo.app.data.local.GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay, row.archivedEpochDay, row.reminderMode, row.alarmSoundUri, row.alarmSoundName).toDomain().copy(executionTimes = times[row.id].orEmpty()),
+                    com.ritmo.app.data.local.GoalEntity(row.id, row.title, row.type, row.targetValue, row.unit, row.color, row.startEpochDay, row.status, row.recurrenceType, row.repeatInterval, row.timesPerDay, row.reminderTimeMinutes, row.weekdaysMask, row.monthDay, row.archivedEpochDay, row.reminderMode, row.alarmSoundUri, row.alarmSoundName, row.earlyCompletionMinutes).toDomain().copy(executionTimes = goalSlots.map { it.localTimeMinutes }, reminders = goalSlots.map { GoalReminder(it.localTimeMinutes, it.reminderMode, it.alarmSoundUri, it.alarmSoundName) }),
                     row.completed,
                 )
             }.filter { it.goal.isScheduledOn(date) }
@@ -37,18 +39,18 @@ class RoomGoalRepository @Inject constructor(private val dao: GoalDao, private v
 
     override suspend fun create(goal: Goal): Long {
         val id = dao.insertGoal(goal.toEntity())
-        if (goal.executionTimes.isNotEmpty()) dao.insertSlots(goal.executionTimes.mapIndexed { index, time -> ScheduleSlotEntity(goalId = id, localTimeMinutes = time, sortOrder = index) })
+        if (goal.executionTimes.isNotEmpty()) dao.insertSlots(goal.executionTimes.mapIndexed { index, time -> goal.reminders.getOrNull(index)?.let { ScheduleSlotEntity(goalId = id, localTimeMinutes = time, sortOrder = index, reminderMode = it.mode, alarmSoundUri = it.soundUri, alarmSoundName = it.soundName) } ?: ScheduleSlotEntity(goalId = id, localTimeMinutes = time, sortOrder = index) })
         if (goal.reminderTimeMinutes != null || goal.executionTimes.isNotEmpty()) reminders.schedule(goal.copy(id = id))
         RitmoWidgetProvider.updateAll(context)
         return id
     }
-    override suspend fun get(goalId: Long): Goal? = dao.getGoal(goalId)?.toDomain()?.copy(executionTimes = dao.getSlots(goalId).map { it.localTimeMinutes })
+    override suspend fun get(goalId: Long): Goal? = dao.getGoal(goalId)?.toDomain()?.let { goal -> val slots = dao.getSlots(goalId); goal.copy(executionTimes = slots.map { it.localTimeMinutes }, reminders = slots.map { GoalReminder(it.localTimeMinutes, it.reminderMode, it.alarmSoundUri, it.alarmSoundName) }) }
     override suspend fun update(goal: Goal) {
         val previous = get(goal.id)
         if (previous != null) reminders.cancel(previous)
         dao.updateGoal(goal.toEntity())
         dao.deleteSlots(goal.id)
-        if (goal.executionTimes.isNotEmpty()) dao.insertSlots(goal.executionTimes.mapIndexed { index, time -> ScheduleSlotEntity(goalId = goal.id, localTimeMinutes = time, sortOrder = index) })
+        if (goal.executionTimes.isNotEmpty()) dao.insertSlots(goal.executionTimes.mapIndexed { index, time -> goal.reminders.getOrNull(index)?.let { ScheduleSlotEntity(goalId = goal.id, localTimeMinutes = time, sortOrder = index, reminderMode = it.mode, alarmSoundUri = it.soundUri, alarmSoundName = it.soundName) } ?: ScheduleSlotEntity(goalId = goal.id, localTimeMinutes = time, sortOrder = index) })
         if (goal.reminderTimeMinutes != null || goal.executionTimes.isNotEmpty()) reminders.schedule(goal)
         RitmoWidgetProvider.updateAll(context)
     }
@@ -63,12 +65,12 @@ class RoomGoalRepository @Inject constructor(private val dao: GoalDao, private v
     }
     override suspend fun decrement(goalId: Long, date: LocalDate) { dao.undoLast(goalId, date.toEpochDay()); RitmoWidgetProvider.updateAll(context) }
     override fun observeGoals(): Flow<List<Goal>> = combine(dao.observeGoals(), dao.observeSlots()) { goals, slots ->
-        val times = slots.groupBy { it.goalId }.mapValues { it.value.map { slot -> slot.localTimeMinutes } }
-        goals.map { entity -> entity.toDomain().copy(executionTimes = times[entity.id].orEmpty()) }
+        val grouped = slots.groupBy { it.goalId }
+        goals.map { entity -> val goalSlots = grouped[entity.id].orEmpty(); entity.toDomain().copy(executionTimes = goalSlots.map { it.localTimeMinutes }, reminders = goalSlots.map { GoalReminder(it.localTimeMinutes, it.reminderMode, it.alarmSoundUri, it.alarmSoundName) }) }
     }
     override fun observeAnalyticsGoals(): Flow<List<Goal>> = combine(dao.observeAnalyticsGoals(), dao.observeSlots()) { goals, slots ->
-        val times = slots.groupBy { it.goalId }.mapValues { it.value.map { slot -> slot.localTimeMinutes } }
-        goals.map { entity -> entity.toDomain().copy(executionTimes = times[entity.id].orEmpty()) }
+        val grouped = slots.groupBy { it.goalId }
+        goals.map { entity -> val goalSlots = grouped[entity.id].orEmpty(); entity.toDomain().copy(executionTimes = goalSlots.map { it.localTimeMinutes }, reminders = goalSlots.map { GoalReminder(it.localTimeMinutes, it.reminderMode, it.alarmSoundUri, it.alarmSoundName) }) }
     }
     override fun observeCompletions(from: LocalDate, to: LocalDate): Flow<List<CompletionRecord>> =
         dao.observeCompletions(from.toEpochDay(), to.toEpochDay()).map { rows -> rows.map { CompletionRecord(it.goalId, LocalDate.ofEpochDay(it.effectiveEpochDay), it.value, it.completedAt) } }

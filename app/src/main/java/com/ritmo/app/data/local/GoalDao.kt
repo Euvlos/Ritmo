@@ -25,6 +25,7 @@ data class GoalWithProgress(
     val reminderMode: com.ritmo.app.domain.model.ReminderMode,
     val alarmSoundUri: String?,
     val alarmSoundName: String?,
+    val earlyCompletionMinutes: Int,
     val completed: Int,
 )
 

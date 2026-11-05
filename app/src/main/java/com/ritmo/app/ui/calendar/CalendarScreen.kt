@@ -1,6 +1,7 @@
 package com.ritmo.app.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,8 +51,10 @@ fun CalendarScreen(onBack: () -> Unit, onGoal: (Long) -> Unit, viewModel: Calend
 }
 
 @Composable private fun DayCell(day: CalendarDay, selected: Boolean, select: (LocalDate) -> Unit, modifier: Modifier = Modifier) {
-    val color = when { selected -> MaterialTheme.colorScheme.primary; day.progress >= 1f -> Color(0xFF3B8D62); day.progress > 0f -> MaterialTheme.colorScheme.tertiary; else -> Color.Transparent }
-    Box(modifier.aspectRatio(1f).padding(3.dp).clip(CircleShape).background(color).clickable { select(day.date) }, contentAlignment = Alignment.Center) {
-        Text(day.date.dayOfMonth.toString(), color = when { selected || day.progress > 0f -> Color.White; !day.inMonth -> MaterialTheme.colorScheme.onSurface.copy(.35f); else -> MaterialTheme.colorScheme.onSurface }, fontWeight = if (day.date == LocalDate.now()) FontWeight.Bold else FontWeight.Normal)
+    val intensity = if (day.scheduled == 0) 0f else .12f + day.progress * .88f
+    val color = if (day.scheduled == 0) Color.Transparent else MaterialTheme.colorScheme.primary.copy(alpha = intensity)
+    val outline = if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier
+    Box(modifier.aspectRatio(1f).padding(3.dp).then(outline).clip(CircleShape).background(color).clickable { select(day.date) }, contentAlignment = Alignment.Center) {
+        Text(day.date.dayOfMonth.toString(), color = when { day.progress >= .55f -> MaterialTheme.colorScheme.onPrimary; !day.inMonth -> MaterialTheme.colorScheme.onSurface.copy(.35f); else -> MaterialTheme.colorScheme.onSurface }, fontWeight = if (day.date == LocalDate.now() || selected) FontWeight.Bold else FontWeight.Normal)
     }
 }

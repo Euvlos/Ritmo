@@ -28,8 +28,11 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun StatisticsScreen(onBack: () -> Unit, onGoal: (Long) -> Unit, viewModel: StatisticsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
+    var tab by remember { mutableIntStateOf(0) }
     Scaffold(topBar = { TopAppBar(title = { Text("Аналитика") }, navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(tab == 0, { tab = 0 }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Активные") }; SegmentedButton(tab == 1, { tab = 1 }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Архив") } } }
+            if (tab == 0) {
             item { AnalyticsPeriodSelector(state.range, viewModel::period, viewModel::custom) }
             item { QualityHeader(state.metrics, state.trend) }
             item { InsightCard(state.insight) }
@@ -41,16 +44,25 @@ fun StatisticsScreen(onBack: () -> Unit, onGoal: (Long) -> Unit, viewModel: Stat
             item { Text("Динамика выполнения", style = MaterialTheme.typography.titleLarge); Spacer(Modifier.height(10.dp)); BarChart(state.metrics.dailyProgress, Modifier.fillMaxWidth().height(150.dp)) }
             item { Text("По целям", style = MaterialTheme.typography.titleLarge) }
             items(state.goals, key = { it.goal.id }) { stat ->
-                Card(Modifier.fillMaxWidth().clickable { onGoal(stat.goal.id) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text(stat.goal.title, style = MaterialTheme.typography.titleMedium); Text(if (stat.goal.status == com.ritmo.app.domain.model.GoalStatus.ARCHIVED) "Удалена · ${stat.metrics.grade}" else stat.metrics.grade, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Text("${stat.metrics.qualityScore}", style = MaterialTheme.typography.headlineSmall) }
-                        LinearProgressIndicator({ stat.metrics.qualityScore / 100f }, Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round)
-                        Text("Выполнение ${stat.metrics.completionRate}% · ${trendLabel(stat.trend)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Пропущено ${stat.metrics.skippedOccurrences} · отложено ${stat.metrics.snoozedOccurrences}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(stat.insight, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+                GoalStatCard(stat, onGoal)
             }
+            } else {
+                item { Text("Удалённые цели", style = MaterialTheme.typography.titleLarge) }
+                if (state.archivedGoals.isEmpty()) item { Text("Архив пуст", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                items(state.archivedGoals, key = { it.goal.id }) { stat -> GoalStatCard(stat, onGoal) }
+            }
+        }
+    }
+}
+
+@Composable private fun GoalStatCard(stat: GoalStat, onGoal: (Long) -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable { onGoal(stat.goal.id) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text(stat.goal.title, style = MaterialTheme.typography.titleMedium); Text(stat.metrics.grade, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Text("${stat.metrics.qualityScore}", style = MaterialTheme.typography.headlineSmall) }
+            LinearProgressIndicator({ stat.metrics.qualityScore / 100f }, Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round)
+            Text("Выполнение ${stat.metrics.completionRate}% · ${trendLabel(stat.trend)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Пропущено ${stat.metrics.skippedOccurrences} · отложено ${stat.metrics.snoozedOccurrences}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stat.insight, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
